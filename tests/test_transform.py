@@ -40,17 +40,17 @@ def df() -> pl.LazyFrame:
     )
 
 
-def test_check_splits(df, splits, unnormalized_splits):
+def test_check_splits(splits, unnormalized_splits):
     result = transform.check_splits(unnormalized_splits)
     assert result == splits
     expected_warning = "Split proportions were normalized to sum to 1.0: {'train': 0.5, 'val': 0.25, 'test': 0.25}"
     with pytest.warns(UserWarning, match=expected_warning):
-        transform.assign_split(df, unnormalized_splits, "sample_id")
+        transform.assign_splits(unnormalized_splits, "sample_id")
 
 
-def test_assign_splits(df, splits):
-    result = transform.assign_split(df=df, splits=splits, group="sample_id")
-    testing.assert_frame_equal(result.select("split"), df.select("split"))
+def test_assign_splits(df: pl.LazyFrame, splits):
+    result = transform.assign_splits(splits=splits, group="sample_id")
+    testing.assert_frame_equal(df.select(result), df.select("split"))
 
 
 def test_minmax_scale():
@@ -85,13 +85,14 @@ def test_if_over():
     pass
 
 
-def test_integration(df, splits):
+def test_integration(df: pl.LazyFrame, splits):
     splits = {"train": 0.5, "val": 0.25, "test": 0.25}
-    df = transform.assign_split(df, splits=splits, group="sample_id", name="split")
-    columns = cs.numeric()
+    assignment = transform.assign_splits(splits=splits, group="sample_id", name="split")
+    df = df.with_columns(assignment)
+    columns = cs.by_name("a", "b", "c")
     train = columns.filter(pl.col("split").eq("train"))
-    scale = transform.standardize(columns, method="zscore", train=train)
     imputation = transform.impute(columns, method="median", train=train)
-    transforms = [scale, imputation]
+    scale = transform.standardize(columns, method="minmax", train=train)
+    transforms = [imputation, scale]
     df = transform.pipeline(df, transforms, over="time")
-    print(df)
+    pass

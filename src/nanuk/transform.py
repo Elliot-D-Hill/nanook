@@ -14,9 +14,9 @@ def check_splits(splits: dict[str, float]) -> dict[str, float]:
     return splits
 
 
-def assign_split(
-    df: TFrame, splits: dict[str, float], group: str | list[str], name: str = "split"
-) -> TFrame:
+def assign_splits(
+    splits: dict[str, float], group: str | list[str], name: str = "split"
+) -> pl.Expr:
     splits = check_splits(splits)
     lower = 0.0
     expr = pl.when(False).then(None)
@@ -25,7 +25,7 @@ def assign_split(
         upper = lower + size * index.max()
         expr = expr.when(index.is_between(lower, upper)).then(pl.lit(split))
         lower = upper
-    return df.with_columns(expr.alias(name))
+    return expr.alias(name)
 
 
 def if_over(expr: pl.Expr, over: str | list[str] | pl.Expr | None) -> pl.Expr:

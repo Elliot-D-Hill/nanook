@@ -1,14 +1,14 @@
 import polars as pl
 
-from nanuk.frame import collect
+from nanuk.frame import collect_if_lazy
 from nanuk.typing import TFrame
 
 
 def drop_null_columns(df: TFrame, cutoff: float) -> TFrame:
     n_rows = df.select(pl.len())
-    n_rows = collect(n_rows).item()
+    n_rows = collect_if_lazy(n_rows).item()
     column_is_null = pl.all().null_count().truediv(n_rows).lt(cutoff)
-    columns = collect(df.select(column_is_null)).to_dicts()[0]
+    columns = collect_if_lazy(df.select(column_is_null)).to_dicts()[0]
     columns_to_keep = [col for col, is_null in columns.items() if is_null]
     return df.select(columns_to_keep)
 

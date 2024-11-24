@@ -3,7 +3,7 @@ import polars as pl
 from nanuk.typing import TFrame
 
 
-def collect(df: TFrame) -> pl.DataFrame:
+def collect_if_lazy(df: TFrame) -> pl.DataFrame:
     match df:
         case pl.DataFrame():
             return df
