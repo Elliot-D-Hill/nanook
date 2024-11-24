@@ -2,17 +2,16 @@ import polars as pl
 import polars.selectors as cs
 import pytest
 from nanuk import transform
-from nanuk.typing import Frame
 from polars import testing
 
 
 @pytest.fixture
-def splits():
+def splits() -> dict[str, float]:
     return {"train": 0.5, "val": 0.25, "test": 0.25}
 
 
 @pytest.fixture
-def unnormalized_splits():
+def unnormalized_splits() -> dict[str, float]:
     return {"train": 50.0, "val": 25.0, "test": 25.0}
 
 
@@ -41,9 +40,7 @@ def df() -> pl.LazyFrame:
     )
 
 
-def test_check_splits(
-    df: Frame, splits: dict[str, float], unnormalized_splits: dict[str, float]
-):
+def test_check_splits(df, splits, unnormalized_splits):
     result = transform.check_splits(unnormalized_splits)
     assert result == splits
     expected_warning = "Split proportions were normalized to sum to 1.0: {'train': 0.5, 'val': 0.25, 'test': 0.25}"
@@ -51,7 +48,7 @@ def test_check_splits(
         transform.assign_split(df, unnormalized_splits, "sample_id")
 
 
-def test_assign_splits(df: Frame, splits: dict[str, float]):
+def test_assign_splits(df, splits):
     result = transform.assign_split(df=df, splits=splits, group="sample_id")
     testing.assert_frame_equal(result.select("split"), df.select("split"))
 
@@ -88,7 +85,8 @@ def test_if_over():
     pass
 
 
-def test_integration(df: Frame, splits: dict[str, float]):
+def test_integration(df, splits):
+    splits = {"train": 0.5, "val": 0.25, "test": 0.25}
     df = transform.assign_split(df, splits=splits, group="sample_id", name="split")
     columns = cs.numeric()
     train = columns.filter(pl.col("split").eq("train"))

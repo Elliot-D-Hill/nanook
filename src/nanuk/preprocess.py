@@ -1,22 +1,21 @@
 import polars as pl
 
-Frame = pl.DataFrame | pl.LazyFrame
+from nanuk.frame import collect
+from nanuk.typing import TFrame
 
 
-def drop_null_columns(df: pl.LazyFrame, cutoff: float) -> pl.LazyFrame:
-    n_rows = df.select(pl.len()).collect().item()
-    null_proportion = df.null_count().with_columns(pl.all().truediv(n_rows))
-    keep = null_proportion.select(pl.all().lt(cutoff)).collect()
-    kept_columns = [col for col in df.columns if keep[col].item()]
-    return df.select(kept_columns)
+def drop_null_columns(df: TFrame, cutoff: float) -> TFrame:
+    n_rows = df.select(pl.len())
+    n_rows = collect(n_rows).item()
+    column_is_null = pl.all().null_count().truediv(n_rows).lt(cutoff)
+    columns = collect(df.select(column_is_null)).to_dicts()[0]
+    columns_to_keep = [col for col, is_null in columns.items() if is_null]
+    return df.select(columns_to_keep)
 
 
-# TODO make cutoff parameter
-def filter_null_rows(df: pl.LazyFrame, columns: pl.Expr) -> pl.LazyFrame:
+def filter_null_rows(df: TFrame, columns: pl.Expr) -> TFrame:
     return df.filter(~pl.all_horizontal(columns.is_null()))
 
 
-def drop_zero_variance(df: pl.LazyFrame, cutoff: float) -> pl.LazyFrame:
-    to_drop = df.select(pl.all().var().lt(cutoff)).collect()
-    to_drop = [col for col in to_drop.columns if to_drop[col].item()]
-    return df.drop(to_drop)
+def drop_zero_variance(df: TFrame, cutoff: float) -> TFrame:
+    return df.select(pl.all().var().gt(cutoff))
