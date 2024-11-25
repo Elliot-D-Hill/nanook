@@ -11,26 +11,28 @@ def splits() -> dict[str, float]:
 
 
 @pytest.fixture
-def unnormalized_splits() -> dict[str, float]:
-    return {"train": 50.0, "val": 25.0, "test": 25.0}
+def split():
+    return pl.Series(
+        [
+            "train",
+            "train",
+            "train",
+            "train",
+            "train",
+            "train",
+            "val",
+            "val",
+            "test",
+            "test",
+        ]
+    )
 
 
 @pytest.fixture
-def df() -> pl.LazyFrame:
+def df(split) -> pl.LazyFrame:
     return pl.LazyFrame(
         {
-            "split": [
-                "train",
-                "train",
-                "train",
-                "train",
-                "train",
-                "train",
-                "val",
-                "val",
-                "test",
-                "test",
-            ],
+            "split": split,
             "sample_id": [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
             "time": [1, 2, 2, 3, 1, 1, 2, 3, 1, 2],
             "a": [1.0, 1.0, 1.0, 2.0, None, 3.0, 4.0, 5.0, 6.0, 7.0],
@@ -40,7 +42,8 @@ def df() -> pl.LazyFrame:
     )
 
 
-def test_check_splits(splits, unnormalized_splits):
+def test_check_splits(splits):
+    unnormalized_splits = {"train": 50.0, "val": 25.0, "test": 25.0}
     result = transform.check_splits(unnormalized_splits)
     assert result == splits
     expected_warning = "Split proportions were normalized to sum to 1.0: {'train': 0.5, 'val': 0.25, 'test': 0.25}"
@@ -54,35 +57,38 @@ def test_assign_splits(df: pl.LazyFrame, splits):
 
 
 def test_minmax_scale():
-    schema = ["a", "b"]
-    data = pl.DataFrame([[-1, 2], [-0.5, 6], [0, 10], [1, 18]], schema=schema)
-    expected = pl.DataFrame(
-        [[0.0, 0.0], [0.25, 0.25], [0.5, 0.5], [1.0, 1.0]], schema=schema
-    )
+    data = pl.LazyFrame({"a": [-1.0, -0.5, 0.0, 1.0], "b": [2, 6, 10, 18]})
+    expected = pl.LazyFrame({"a": [0.0, 0.25, 0.5, 1.0], "b": [0.0, 0.25, 0.5, 1.0]})
     result = data.with_columns(transform.minmax_scale(cs.numeric()))
     testing.assert_frame_equal(result, expected)
 
 
 def test_zscore_scale():
-    schema = ["a", "b"]
-    data = pl.DataFrame([[0, 0], [0, 0], [1, 1], [1, 1]], schema=schema)
-    expected = pl.DataFrame(
-        [[-1.0, -1.0], [-1.0, -1.0], [1.0, 1.0], [1.0, 1.0]], schema=schema
-    )
+    data = pl.LazyFrame({"a": [0, 0, 1, 1], "b": [0, 0, 1, 1]})
+    expected = pl.LazyFrame({"a": [-1.0, -1.0, 1.0, 1.0], "b": [-1.0, -1.0, 1.0, 1.0]})
     result = data.with_columns(transform.zscore_scale(cs.numeric()))
     testing.assert_frame_equal(result, expected)
 
 
+# @pytest.mark.parametrize("method", ["minmax", "zscore"])
 def test_standardize():
-    pass
+    pass  # TODO: Implement test
 
 
+# @pytest.mark.parametrize("method", ["mean", "median", "interpolate", "forword_fill"])
 def test_impute():
-    pass
+    pass  # TODO: Implement test
 
 
 def test_if_over():
-    pass
+    data = pl.LazyFrame({"a": [1, 2, 3, 4], "b": [1, 1, 2, 2]})
+    expr = pl.col("a") * 2
+    result = transform.if_over(expr, over=None)
+    expected = data.with_columns(expr.alias("a"))
+    testing.assert_frame_equal(data.with_columns(result), expected)
+    result = transform.if_over(expr, over="b")
+    expected = data.with_columns(expr.over("b").alias("a"))
+    testing.assert_frame_equal(data.with_columns(result), expected)
 
 
 def test_integration(df: pl.LazyFrame):
