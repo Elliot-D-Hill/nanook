@@ -1,7 +1,7 @@
-from typing import Literal, TypeAlias, TypeVar
+from typing import Literal, TypeVar
 
 import polars as pl
 
-Standardize: TypeAlias = Literal["minmax", "zscore"]
-Impute: TypeAlias = Literal["mean", "median", "interpolate", "ffill"]
+type Standardize = Literal["minmax", "zscore"]
+type Impute = Literal["mean", "median", "interpolate", "ffill"]
 TFrame = TypeVar("TFrame", pl.DataFrame, pl.LazyFrame)
