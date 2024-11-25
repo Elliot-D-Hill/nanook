@@ -1,10 +1,9 @@
 import polars as pl
 
 from nanuk.frame import collect_if_lazy
-from nanuk.typing import TFrame
 
 
-def drop_null_columns(df: TFrame, cutoff: float) -> TFrame:
+def drop_null_columns[T: (pl.DataFrame, pl.LazyFrame)](df: T, cutoff: float) -> T:
     n_rows = df.select(pl.len())
     n_rows = collect_if_lazy(n_rows).item()
     column_is_null = pl.all().null_count().truediv(n_rows).lt(cutoff)
@@ -13,9 +12,9 @@ def drop_null_columns(df: TFrame, cutoff: float) -> TFrame:
     return df.select(columns_to_keep)
 
 
-def filter_null_rows(df: TFrame, columns: pl.Expr) -> TFrame:
+def filter_null_rows[T: (pl.DataFrame, pl.LazyFrame)](df: T, columns: pl.Expr) -> T:
     return df.filter(~pl.all_horizontal(columns.is_null()))
 
 
-def drop_zero_variance(df: TFrame, cutoff: float) -> TFrame:
+def drop_zero_variance[T: (pl.DataFrame, pl.LazyFrame)](df: T, cutoff: float) -> T:
     return df.select(pl.all().var().gt(cutoff))

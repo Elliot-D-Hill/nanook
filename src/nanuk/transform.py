@@ -3,7 +3,7 @@ import warnings
 import polars as pl
 import polars.selectors as cs
 
-from nanuk.typing import Impute, Standardize, TFrame
+from nanuk.typing import Impute, Standardize
 
 
 def check_splits(splits: dict[str, float]) -> dict[str, float]:
@@ -74,7 +74,9 @@ def impute(expr: pl.Expr, method: str, train: pl.Expr | None = None) -> pl.Expr:
     return expr.fill_null(train)
 
 
-def pipeline(df: TFrame, transforms: list[pl.Expr], over: str | None = None) -> TFrame:
+def pipeline[T: (pl.DataFrame, pl.LazyFrame)](
+    df: T, transforms: list[pl.Expr], over: str | None = None
+) -> T:
     for transform in transforms:
         transform = if_over(expr=transform, over=over)
         df = df.with_columns(transform)
