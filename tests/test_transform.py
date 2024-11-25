@@ -85,14 +85,14 @@ def test_if_over():
     pass
 
 
-def test_integration(df: pl.LazyFrame, splits):
+def test_integration(df: pl.LazyFrame):
     splits = {"train": 0.5, "val": 0.25, "test": 0.25}
     assignment = transform.assign_splits(splits=splits, group="sample_id", name="split")
     df = df.with_columns(assignment)
     columns = cs.by_name("a", "b", "c")
     train = columns.filter(pl.col("split").eq("train"))
     imputation = transform.impute(columns, method="median", train=train)
-    scale = transform.standardize(columns, method="minmax", train=train)
+    scale = transform.standardize(columns, method="zscore", train=train)
     transforms = [imputation, scale]
     df = transform.pipeline(df, transforms, over="time")
     pass

@@ -48,7 +48,8 @@ def zscore_scale(expr: pl.Expr, train: pl.Expr = cs.numeric()) -> pl.Expr:
     return safe_divide(expr.sub(train.mean()), train.std(ddof=0))
 
 
-def standardize(expr: pl.Expr, method: str, train: pl.Expr = cs.numeric()) -> pl.Expr:
+def standardize(expr: pl.Expr, method: str, train: pl.Expr | None = None) -> pl.Expr:
+    train = expr if train is None else train
     if method == "minmax":
         expr = minmax_scale(expr=expr, train=train)
     elif method == "zscore":
@@ -58,14 +59,15 @@ def standardize(expr: pl.Expr, method: str, train: pl.Expr = cs.numeric()) -> pl
     return expr
 
 
-def impute(expr: pl.Expr, method: str, train: pl.Expr = cs.numeric()) -> pl.Expr:
+def impute(expr: pl.Expr, method: str, train: pl.Expr | None = None) -> pl.Expr:
+    train = expr if train is None else train
     if method == "mean":
         train = train.mean()
     elif method == "median":
         train = train.median()
     elif method == "interpolate":
         train = train.interpolate(method="linear")
-    elif method == "ffill":
+    elif method == "forward_fill":
         train = train.forward_fill()
     else:
         raise ValueError(f"Unknown method: '{method}'. Choose from: {Impute}")
