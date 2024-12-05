@@ -6,7 +6,7 @@ Nanuk is the Inuit word for polar bear.
 
 ```python
 import polars as pl
-from nanuk import transform
+from nanook import transform
 
 df = pl.LazyFrame(
     {

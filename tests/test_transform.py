@@ -1,7 +1,7 @@
 import polars as pl
 import polars.selectors as cs
 import pytest
-from nanuk import transform
+from nanook import transform
 from polars import testing
 
 
