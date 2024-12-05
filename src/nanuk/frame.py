@@ -1,6 +1,17 @@
+from functools import reduce
+
 import polars as pl
+from polars._typing import JoinStrategy
 
 from nanuk.typing import Frame
+
+
+def join_dataframes[T: (pl.DataFrame, pl.LazyFrame)](
+    frames: list[T], on: str | list[str], how: JoinStrategy
+) -> T:
+    return reduce(
+        lambda left, right: left.join(right, how=how, coalesce=True, on=on), frames
+    )
 
 
 def collect_if_lazy(df: Frame) -> pl.DataFrame:

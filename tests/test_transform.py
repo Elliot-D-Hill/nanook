@@ -7,33 +7,15 @@ from polars import testing
 
 @pytest.fixture
 def splits() -> dict[str, float]:
-    return {"train": 0.5, "val": 0.25, "test": 0.25}
+    return {"a": 0.5, "b": 0.25, "c": 0.25}
 
 
 @pytest.fixture
-def split():
-    return pl.Series(
-        [
-            "train",
-            "train",
-            "train",
-            "train",
-            "train",
-            "train",
-            "val",
-            "val",
-            "test",
-            "test",
-        ]
-    )
-
-
-@pytest.fixture
-def df(split) -> pl.LazyFrame:
+def lf() -> pl.LazyFrame:
     return pl.LazyFrame(
         {
-            "split": split,
-            "sample_id": [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+            "split": ["a", "a", "a", "a", "a", "a", "b", "b", "c", "c"],
+            "id": [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
             "time": [1, 2, 2, 3, 1, 1, 2, 3, 1, 2],
             "a": [1.0, 1.0, 1.0, 2.0, None, 3.0, 4.0, 5.0, 6.0, 7.0],
             "b": [None, 2, 3, 1, 2, 1, 3, 4, 5, 6],
@@ -42,18 +24,42 @@ def df(split) -> pl.LazyFrame:
     )
 
 
-def test_check_splits(splits):
-    unnormalized_splits = {"train": 50.0, "val": 25.0, "test": 25.0}
+@pytest.fixture
+def lf_splits():
+    return pl.LazyFrame(
+        {
+            "split": ["a", "a", "b", "c", "a", "a", "b", "c"],
+            "time": [1, 2, 3, 4, 1, 2, 3, 4],
+            "id": [0, 0, 0, 0, 1, 1, 1, 1],
+        }
+    )
+
+
+def test_check_splits(lf: pl.LazyFrame, splits: dict[str, float]):
+    unnormalized_splits = {"a": 50.0, "b": 25.0, "c": 25.0}
     result = transform.check_splits(unnormalized_splits)
     assert result == splits
-    expected_warning = "Split proportions were normalized to sum to 1.0: {'train': 0.5, 'val': 0.25, 'test': 0.25}"
+    expected_warning = "Split proportions were normalized to sum to 1.0: {'a': 0.5, 'b': 0.25, 'c': 0.25}"
     with pytest.warns(UserWarning, match=expected_warning):
-        transform.assign_splits(unnormalized_splits, "sample_id")
+        transform.assign_splits(lf, splits=unnormalized_splits, by="id")
 
 
-def test_assign_splits(df: pl.LazyFrame, splits):
-    result = transform.assign_splits(splits=splits, group="sample_id")
-    testing.assert_frame_equal(df.select(result), df.select("split"))
+def test_assign_splits(lf: pl.LazyFrame, splits: dict[str, float]):
+    result = transform.assign_splits(frame=lf, splits=splits, by="id")
+    testing.assert_frame_equal(result, lf)
+
+
+def test_assign_splits_over(lf_splits: pl.LazyFrame):
+    splits = {"a": 0.6, "b": 0.2, "c": 0.2}
+    result = transform.assign_splits(
+        frame=lf_splits, splits=splits, by="time", over="id", name="split"
+    )
+    testing.assert_frame_equal(result, lf_splits, check_row_order=False)
+    df = lf_splits.collect().sample(fraction=1, with_replacement=False, shuffle=True)
+    result = transform.assign_splits(
+        frame=df, splits=splits, by="time", over="id", name="split"
+    )
+    testing.assert_frame_equal(result, lf_splits.collect(), check_row_order=False)
 
 
 def test_minmax_scale():
@@ -80,25 +86,13 @@ def test_impute():
     pass  # TODO: Implement test
 
 
-def test_if_over():
-    data = pl.LazyFrame({"a": [1, 2, 3, 4], "b": [1, 1, 2, 2]})
-    expr = pl.col("a") * 2
-    result = transform.if_over(expr, over=None)
-    expected = data.with_columns(expr.alias("a"))
-    testing.assert_frame_equal(data.with_columns(result), expected)
-    result = transform.if_over(expr, over="b")
-    expected = data.with_columns(expr.over("b").alias("a"))
-    testing.assert_frame_equal(data.with_columns(result), expected)
-
-
-def test_integration(df: pl.LazyFrame):
-    splits = {"train": 0.5, "val": 0.25, "test": 0.25}
-    assignment = transform.assign_splits(splits=splits, group="sample_id", name="split")
-    df = df.with_columns(assignment)
-    columns = cs.by_name("a", "b", "c")
-    train = columns.filter(pl.col("split").eq("train"))
-    imputation = transform.impute(columns, method="median", train=train)
-    scale = transform.standardize(columns, method="zscore", train=train)
-    transforms = [imputation, scale]
-    df = transform.pipeline(df, transforms, over="time")
-    pass
+# def test_integration(lf: pl.LazyFrame):
+#     splits = {"train": 0.5, "val": 0.25, "test": 0.25}
+#     lf = transform.assign_splits(lf, splits=splits, by="id", name="split")
+#     columns = cs.by_name("a", "b", "c")
+#     train = columns.filter(pl.col("split").eq("train"))
+#     imputation = transform.impute(columns, method="median", train=train)
+#     scale = transform.standardize(columns, method="zscore", train=train)
+#     transforms = [imputation, scale]
+#     lf = transform.pipeline(lf, transforms, over="time")
+#     pass

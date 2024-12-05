@@ -7,6 +7,10 @@ from polars._typing import IntoExpr
 from nanuk.typing import Impute, Standardize
 
 
+def identity[T](value: T) -> T:
+    return value
+
+
 def check_splits(splits: dict[str, float]) -> dict[str, float]:
     split_sum = sum(splits.values())
     splits = {split: size / split_sum for split, size in splits.items()}
@@ -15,24 +19,29 @@ def check_splits(splits: dict[str, float]) -> dict[str, float]:
     return splits
 
 
-def assign_splits(
-    splits: dict[str, float], group: str | list[str], name: str = "split"
-) -> pl.Expr:
+def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
+    frame: T,
+    splits: dict[str, float],
+    by: str | list[str],
+    over: IntoExpr = None,
+    name: str = "split",
+) -> T:
+    frame = frame.sort(pl.col(by).over(over))
     splits = check_splits(splits)
     lower = 0.0
-    expr = pl.when(False).then(None)
-    index = pl.col(group).rank(method="dense").sub(1)
+    index = pl.col(by).rank(method="dense").sub(1).over(over)
     items = list(splits.items())
+    expr = pl.when(False).then(None)
     for split, size in items[:-1]:
         upper = lower + size * index.max()
         expr = expr.when(index.is_between(lower, upper)).then(pl.lit(split))
         lower = upper
-    last_split = items[-1][0]
-    return expr.otherwise(pl.lit(last_split)).alias(name)
+    expr = expr.otherwise(pl.lit(items[-1][0]))
+    return frame.with_columns(expr.alias(name))
 
 
 def safe_divide(numerator: pl.Expr, denominator: pl.Expr) -> pl.Expr:
-    denominator = pl.when(denominator.eq(0)).then(1).otherwise(denominator)
+    denominator = pl.when(denominator.eq(0.0)).then(1.0).otherwise(denominator)
     return numerator.truediv(denominator)
 
 
@@ -73,14 +82,9 @@ def impute(expr: pl.Expr, method: str, train: pl.Expr | None = None) -> pl.Expr:
     return expr.fill_null(train)
 
 
-def if_over(expr: pl.Expr, over: IntoExpr) -> pl.Expr:
-    return pl.when(over is not None).then(expr.over(over)).otherwise(expr)
-
-
 def pipeline[T: (pl.DataFrame, pl.LazyFrame)](
-    df: T, transforms: list[pl.Expr], over: IntoExpr = None
+    frame: T, transforms: list[pl.Expr], over: IntoExpr = None
 ) -> T:
     for transform in transforms:
-        transform = if_over(expr=transform, over=over)
-        df = df.with_columns(transform)
-    return df
+        frame = frame.with_columns(transform.over(over))
+    return frame
