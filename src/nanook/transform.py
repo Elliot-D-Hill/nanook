@@ -4,7 +4,7 @@ import polars as pl
 import polars.selectors as cs
 from polars._typing import IntoExpr
 
-from nanuk.typing import Impute, Standardize
+from nanook.typing import Impute, Standardize
 
 
 def identity[T](value: T) -> T:

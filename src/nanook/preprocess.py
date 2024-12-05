@@ -1,7 +1,7 @@
 import polars as pl
 import polars.selectors as cs
 
-from nanuk.frame import collect_if_lazy
+from nanook.frame import collect_if_lazy
 
 
 def select_by_condition[T: (pl.DataFrame, pl.LazyFrame)](

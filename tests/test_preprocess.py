@@ -1,6 +1,6 @@
 import polars as pl
 import pytest
-from nanuk import preprocess
+from nanook import preprocess
 from polars import testing
 
 

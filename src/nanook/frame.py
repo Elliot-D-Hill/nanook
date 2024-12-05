@@ -3,8 +3,6 @@ from functools import reduce
 import polars as pl
 from polars._typing import JoinStrategy
 
-from nanuk.typing import Frame
-
 
 def join_dataframes[T: (pl.DataFrame, pl.LazyFrame)](
     frames: list[T], on: str | list[str], how: JoinStrategy
@@ -14,21 +12,21 @@ def join_dataframes[T: (pl.DataFrame, pl.LazyFrame)](
     )
 
 
-def collect_if_lazy(df: Frame) -> pl.DataFrame:
-    match df:
+def collect_if_lazy[T: (pl.DataFrame, pl.LazyFrame)](frame: T) -> pl.DataFrame:
+    match frame:
         case pl.DataFrame():
-            return df
+            return frame
         case pl.LazyFrame():
-            return df.collect()
+            return frame.collect()
         case _:
-            raise ValueError(f"Unsupported type: {type(df)}. Choose from: {Frame}")
+            raise ValueError(f"Unsupported type: {type(frame)}.")
 
 
-def get_columns(df: Frame) -> list[str]:
-    match df:
+def get_column_names[T: (pl.DataFrame, pl.LazyFrame)](frame: T) -> list[str]:
+    match frame:
         case pl.DataFrame():
-            return df.columns
+            return frame.columns
         case pl.LazyFrame():
-            return df.collect_schema().names()
+            return frame.collect_schema().names()
         case _:
-            raise ValueError(f"Unsupported type: {type(df)}. Choose from: {Frame}")
+            raise ValueError(f"Unsupported type: {type(frame)}.")
