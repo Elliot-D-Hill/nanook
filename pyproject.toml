@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "nanuk"
+name = "nanook"
 version = "0.0.1"
 authors = [{ name = "Elliot Hill", email = "elliot.d.hill@duke.edu" }]
 description = "Polars data science utilities"
@@ -16,5 +16,5 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Elliot-D-Hill/nanuk"
-Issues = "https://github.com/Elliot-D-Hill/nanuk/issues"
+Homepage = "https://github.com/Elliot-D-Hill/nanook"
+Issues = "https://github.com/Elliot-D-Hill/nanook/issues"

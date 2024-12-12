@@ -26,18 +26,19 @@ def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
     over: IntoExpr = None,
     name: str = "split",
 ) -> T:
-    frame = frame.sort(pl.col(by).over(over))
+    groups = pl.col(by)
+    frame = frame.sort(groups.over(over))
     splits = check_splits(splits)
-    lower = 0.0
-    index = pl.col(by).rank(method="dense").sub(1).over(over)
+    index = groups.rank(method="dense").sub(1).over(over)
     items = list(splits.items())
     expr = pl.when(False).then(None)
+    lower = 0.0
     for split, size in items[:-1]:
         upper = lower + size * index.max()
         expr = expr.when(index.is_between(lower, upper)).then(pl.lit(split))
         lower = upper
     expr = expr.otherwise(pl.lit(items[-1][0]))
-    return frame.with_columns(expr.alias(name))
+    return frame.select(expr.alias(name), cs.exclude(name))
 
 
 def safe_divide(numerator: pl.Expr, denominator: pl.Expr) -> pl.Expr:
@@ -73,10 +74,6 @@ def impute(expr: pl.Expr, method: str, train: pl.Expr | None = None) -> pl.Expr:
         train = train.mean()
     elif method == "median":
         train = train.median()
-    elif method == "interpolate":
-        train = train.interpolate(method="linear")
-    elif method == "forward_fill":
-        train = train.forward_fill()
     else:
         raise ValueError(f"Unknown method: '{method}'. Choose from: {Impute}")
     return expr.fill_null(train)
