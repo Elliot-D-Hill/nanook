@@ -1,6 +1,6 @@
 # Polars data science utilities
 
-Nanuk is the Inuit word for polar bear.
+Nanook is the Inuit word for polar bear.
 
 ## Usage
 
