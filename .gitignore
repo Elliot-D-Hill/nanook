@@ -163,4 +163,4 @@ cython_debug/
 
 notebook.ipynb
 .vscode/
-.DS_Store/
+**.DS_Store/

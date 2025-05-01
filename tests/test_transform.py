@@ -1,65 +1,8 @@
 import polars as pl
 import polars.selectors as cs
-import pytest
-from nanook import transform
 from polars import testing
 
-
-@pytest.fixture
-def splits() -> dict[str, float]:
-    return {"a": 0.5, "b": 0.25, "c": 0.25}
-
-
-@pytest.fixture
-def lf() -> pl.LazyFrame:
-    return pl.LazyFrame(
-        {
-            "split": ["a", "a", "a", "a", "a", "a", "b", "b", "c", "c"],
-            "id": [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
-            "time": [1, 2, 2, 3, 1, 1, 2, 3, 1, 2],
-            "a": [1.0, 1.0, 1.0, 2.0, None, 3.0, 4.0, 5.0, 6.0, 7.0],
-            "b": [None, 2, 3, 1, 2, 1, 3, 4, 5, 6],
-            "c": [0, 0, 0, 0, 0, None, 1, 1, 1, 1],
-        }
-    )
-
-
-@pytest.fixture
-def lf_splits():
-    return pl.LazyFrame(
-        {
-            "split": ["a", "a", "b", "c", "a", "a", "b", "c"],
-            "time": [1, 2, 3, 4, 1, 2, 3, 4],
-            "id": [0, 0, 0, 0, 1, 1, 1, 1],
-        }
-    )
-
-
-def test_check_splits(lf: pl.LazyFrame, splits: dict[str, float]):
-    unnormalized_splits = {"a": 50.0, "b": 25.0, "c": 25.0}
-    result = transform.check_splits(unnormalized_splits)
-    assert result == splits
-    expected_warning = "Split proportions were normalized to sum to 1.0: {'a': 0.5, 'b': 0.25, 'c': 0.25}"
-    with pytest.warns(UserWarning, match=expected_warning):
-        transform.assign_splits(lf, splits=unnormalized_splits, by="id")
-
-
-def test_assign_splits(lf: pl.LazyFrame, splits: dict[str, float]):
-    result = transform.assign_splits(frame=lf, splits=splits, by="id")
-    testing.assert_frame_equal(result, lf)
-
-
-def test_assign_splits_over(lf_splits: pl.LazyFrame):
-    splits = {"a": 0.6, "b": 0.2, "c": 0.2}
-    result = transform.assign_splits(
-        frame=lf_splits, splits=splits, by="time", over="id", name="split"
-    )
-    testing.assert_frame_equal(result, lf_splits, check_row_order=False)
-    df = lf_splits.collect().sample(fraction=1, with_replacement=False, shuffle=True)
-    result = transform.assign_splits(
-        frame=df, splits=splits, by="time", over="id", name="split"
-    )
-    testing.assert_frame_equal(result, lf_splits.collect(), check_row_order=False)
+from nanook import transform
 
 
 def test_minmax_scale():

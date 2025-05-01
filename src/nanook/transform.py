@@ -1,5 +1,3 @@
-import warnings
-
 import polars as pl
 import polars.selectors as cs
 from polars._typing import IntoExpr
@@ -9,36 +7,6 @@ from nanook.typing import Impute, Standardize
 
 def identity[T](value: T) -> T:
     return value
-
-
-def check_splits(splits: dict[str, float]) -> dict[str, float]:
-    split_sum = sum(splits.values())
-    splits = {split: size / split_sum for split, size in splits.items()}
-    if split_sum != 1.0:
-        warnings.warn(f"Split proportions were normalized to sum to 1.0: {str(splits)}")
-    return splits
-
-
-def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
-    frame: T,
-    splits: dict[str, float],
-    by: str | list[str],
-    over: IntoExpr = None,
-    name: str = "split",
-) -> T:
-    groups = pl.col(by)
-    frame = frame.sort(groups.over(over))
-    splits = check_splits(splits)
-    index = groups.rank(method="dense").sub(1).over(over)
-    items = list(splits.items())
-    expr = pl.when(False).then(None)
-    lower = 0.0
-    for split, size in items[:-1]:
-        upper = lower + size * index.max()
-        expr = expr.when(index.is_between(lower, upper)).then(pl.lit(split))
-        lower = upper
-    expr = expr.otherwise(pl.lit(items[-1][0]))
-    return frame.select(expr.alias(name), cs.exclude(name))
 
 
 def safe_divide(numerator: pl.Expr, denominator: pl.Expr) -> pl.Expr:
@@ -80,7 +48,7 @@ def impute(expr: pl.Expr, method: str, train: pl.Expr | None = None) -> pl.Expr:
 
 
 def pipeline[T: (pl.DataFrame, pl.LazyFrame)](
-    frame: T, transforms: list[pl.Expr], over: IntoExpr = None
+    frame: T, transforms: list[pl.Expr], over: IntoExpr | None = None
 ) -> T:
     for transform in transforms:
         frame = frame.with_columns(transform.over(over))

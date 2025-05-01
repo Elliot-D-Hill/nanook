@@ -21,7 +21,7 @@ def filter_null_rows[T: (pl.DataFrame, pl.LazyFrame)](frame: T, columns: pl.Expr
     return frame.filter(~pl.all_horizontal(columns.is_null()))
 
 
-def drop_zero_variance[T: (pl.DataFrame, pl.LazyFrame)](
+def drop_low_variance[T: (pl.DataFrame, pl.LazyFrame)](
     frame: T, cutoff: float = 1e-8
 ) -> T:
     has_zero_variance = pl.all().var().gt(cutoff)
