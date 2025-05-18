@@ -17,30 +17,31 @@ def validate_splits(splits: dict[str, float]) -> dict[str, float]:
 def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
     frame: T,
     splits: dict[str, float],
-    by: str | list[str],
+    by: str | list[str] | pl.Expr | None = None,
+    stratify_by: str | list[str] | pl.Expr | None = None,
     name: str = "split",
 ) -> T:
     """
     Assigns splits to a DataFrame/LazyFrame based on the specified proportions and groupings.
     Args:
-        frame: The DataFrame/LazyFrame to assign splits to.
+        frame: DataFrame/LazyFrame to assign splits to.
         splits: A dictionary of split names and their corresponding proportions.
-        by: The column(s) to group by for assigning splits.
-        name: The name of the new column to store the assigned splits.
+        by: Column(s) to group by for assigning splits.
+        stratify_by: Column(s) to stratify the splits.
+        name: Name of the new column to store the assigned splits.
     Returns:
-        A DataFrame/LazyFrame with the assigned splits.
+        A DataFrame/LazyFrame with the assigned splits as a new column.
     """
     splits = validate_splits(splits)
     splits = list(splits.items())
-    groups = pl.col(by)
-    frame = frame.sort(groups)
+    groups = pl.col(by) if by else pl.int_range(pl.len())
     index = groups.rank(method="dense").sub(other=1)
-    max_index = index.max()
     expr = pl.when(False).then(None)
     lower = 0.0
     for split, size in splits[:-1]:
-        upper = lower + size * max_index
-        expr = expr.when(index.is_between(lower, upper)).then(pl.lit(split))
+        upper = lower + size * index.max()
+        assignment = index.is_between(lower, upper).over(stratify_by)
+        expr = expr.when(assignment).then(pl.lit(split))
         lower = upper
     expr = expr.otherwise(pl.lit(splits[-1][0]))
     return frame.select(expr.alias(name), cs.exclude(name))
