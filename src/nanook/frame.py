@@ -14,6 +14,16 @@ def validate_splits(splits: dict[str, float]) -> dict[str, float]:
     return splits
 
 
+def to_expr(value: str | list[str] | pl.Expr) -> pl.Expr:
+    match value:
+        case str() | list():
+            return pl.col(value)
+        case pl.Expr():
+            return value
+        case _:
+            raise ValueError(f"Unsupported type for 'value': {type(value)}.")
+
+
 def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
     frame: T,
     splits: dict[str, float],
@@ -30,20 +40,20 @@ def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
         stratify_by: Column(s) to stratify the splits.
         name: Name of the new column to store the assigned splits.
     Returns:
-        A DataFrame/LazyFrame with the assigned splits as a new column.
+        The input DataFrame/LazyFrame with the assigned splits as a new column.
     """
     splits = validate_splits(splits)
-    splits = list(splits.items())
-    groups = pl.col(by) if by else pl.int_range(pl.len())
-    index = groups.rank(method="dense").sub(other=1)
+    split_list = list(splits.items())
+    by = to_expr(by) if by is not None else pl.int_range(pl.len())
+    index = by.rank(method="dense").sub(other=1)
     expr = pl.when(False).then(None)
     lower = 0.0
-    for split, size in splits[:-1]:
+    for split, size in split_list[:-1]:
         upper = lower + size * index.max()
         assignment = index.is_between(lower, upper).over(stratify_by)
         expr = expr.when(assignment).then(pl.lit(split))
         lower = upper
-    expr = expr.otherwise(pl.lit(splits[-1][0]))
+    expr = expr.otherwise(pl.lit(split_list[-1][0]))
     return frame.select(expr.alias(name), cs.exclude(name))
 
 
@@ -63,6 +73,20 @@ def collect_if_lazy[T: (pl.DataFrame, pl.LazyFrame)](frame: T) -> pl.DataFrame:
             return frame.collect()
         case _:
             raise ValueError(f"Unsupported type: {type(frame)}.")
+
+
+def cross_tabulation[T: (pl.DataFrame, pl.LazyFrame)](
+    frame: T, on: str
+) -> pl.DataFrame:
+    index = ["variable", "value"]
+    return (
+        frame.unpivot(index=on)
+        .group_by(on, *index)
+        .len()
+        .pipe(collect_if_lazy)
+        .pivot(on=on, values="len")
+        .sort(index)
+    )
 
 
 def get_column_names[T: (pl.DataFrame, pl.LazyFrame)](frame: T) -> list[str]:

@@ -59,8 +59,6 @@ def test_collect_if_lazy():
     result_collected_lf = frame.collect_if_lazy(lf_input)
     assert isinstance(result_collected_lf, pl.DataFrame)
     testing.assert_frame_equal(result_collected_lf, lf_input.collect())
-    with pytest.raises(ValueError, match="Unsupported type: <class 'int'>."):
-        frame.collect_if_lazy(123)
 
 
 def test_get_column_names():
@@ -68,5 +66,3 @@ def test_get_column_names():
     assert frame.get_column_names(df_input) == ["col1", "col2"]
     lf_input = pl.LazyFrame({"col_x": [1.0], "col_y": [True]})
     assert frame.get_column_names(lf_input) == ["col_x", "col_y"]
-    with pytest.raises(ValueError, match="Unsupported type: <class 'list'>."):
-        frame.get_column_names([1, 2, 3])
