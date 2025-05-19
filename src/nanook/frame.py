@@ -1,9 +1,12 @@
 import warnings
 from functools import reduce
+from typing import Iterable
 
 import polars as pl
 from polars import selectors as cs
 from polars._typing import JoinStrategy
+
+from nanook.typing import Frame
 
 
 def validate_splits(splits: dict[str, float]) -> dict[str, float]:
@@ -14,7 +17,7 @@ def validate_splits(splits: dict[str, float]) -> dict[str, float]:
     return splits
 
 
-def to_expr(value: str | list[str] | pl.Expr) -> pl.Expr:
+def to_expr(value: str | Iterable[str] | pl.Expr) -> pl.Expr:
     match value:
         case str() | list():
             return pl.col(value)
@@ -65,7 +68,7 @@ def join_dataframes[T: (pl.DataFrame, pl.LazyFrame)](
     )
 
 
-def collect_if_lazy[T: (pl.DataFrame, pl.LazyFrame)](frame: T) -> pl.DataFrame:
+def collect_if_lazy(frame: Frame) -> pl.DataFrame:
     match frame:
         case pl.DataFrame():
             return frame
@@ -75,9 +78,8 @@ def collect_if_lazy[T: (pl.DataFrame, pl.LazyFrame)](frame: T) -> pl.DataFrame:
             raise ValueError(f"Unsupported type: {type(frame)}.")
 
 
-def cross_tabulation[T: (pl.DataFrame, pl.LazyFrame)](
-    frame: T, on: str
-) -> pl.DataFrame:
+# TODO: not particulary generic
+def cross_tabulation(frame: Frame, on: str) -> pl.DataFrame:
     index = ["variable", "value"]
     return (
         frame.unpivot(index=on)
@@ -89,7 +91,7 @@ def cross_tabulation[T: (pl.DataFrame, pl.LazyFrame)](
     )
 
 
-def get_column_names[T: (pl.DataFrame, pl.LazyFrame)](frame: T) -> list[str]:
+def get_column_names(frame: Frame) -> list[str]:
     match frame:
         case pl.DataFrame():
             return frame.columns
