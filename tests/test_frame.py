@@ -18,6 +18,14 @@ def test_validate_splits(splits: dict[str, float]):
     assert result == splits
 
 
+def test_to_expr():
+    assert isinstance(frame.to_expr("col"), pl.Expr)
+    assert isinstance(frame.to_expr(["col1", "col2"]), pl.Expr)
+    assert isinstance(frame.to_expr(pl.col("col")), pl.Expr)
+    with pytest.raises(ValueError):
+        frame.to_expr(123)  # type: ignore[arg-type]
+
+
 def test_assign_splits(lf: pl.LazyFrame, splits: dict[str, float]):
     result = frame.assign_splits(frame=lf, splits=splits, by="id")
     testing.assert_frame_equal(result, lf)
