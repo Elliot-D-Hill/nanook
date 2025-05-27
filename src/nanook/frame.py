@@ -1,6 +1,6 @@
 import warnings
 from functools import reduce
-from typing import Iterable
+from typing import Sequence
 
 import polars as pl
 from polars import selectors as cs
@@ -17,9 +17,9 @@ def validate_splits(splits: dict[str, float]) -> dict[str, float]:
     return splits
 
 
-def to_expr(value: str | Iterable[str] | pl.Expr) -> pl.Expr:
+def to_expr(value: str | Sequence[str] | pl.Expr) -> pl.Expr:
     match value:
-        case str() | list():
+        case str() | Sequence():
             return pl.col(value)
         case pl.Expr():
             return value
@@ -30,8 +30,8 @@ def to_expr(value: str | Iterable[str] | pl.Expr) -> pl.Expr:
 def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
     frame: T,
     splits: dict[str, float],
-    by: str | list[str] | pl.Expr | None = None,
-    stratify_by: str | list[str] | pl.Expr | None = None,
+    by: str | Sequence[str] | pl.Expr | None = None,
+    stratify_by: str | Sequence[str | pl.Expr] | pl.Expr | None = None,
     name: str = "split",
 ) -> T:
     """
@@ -60,11 +60,11 @@ def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
     return frame.select(expr.alias(name), cs.exclude(name))
 
 
-def join_dataframes[T: (pl.DataFrame, pl.LazyFrame)](
-    frames: list[T], on: str | list[str], how: JoinStrategy
+def join_frames[T: (pl.DataFrame, pl.LazyFrame)](
+    frames: list[T], on: str | Sequence[str | pl.Expr] | pl.Expr, how: JoinStrategy
 ) -> T:
     return reduce(
-        lambda left, right: left.join(right, how=how, coalesce=True, on=on), frames
+        lambda left, right: left.join(right, on=on, how=how, coalesce=True), frames
     )
 
 
