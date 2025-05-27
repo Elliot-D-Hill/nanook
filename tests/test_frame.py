@@ -38,9 +38,9 @@ def test_join_dataframes():
     expected_inner = pl.DataFrame(
         {"id": [3], "val1": ["c"], "val2": [20], "val3": [True]}
     )
-    result_inner = frame.join_dataframes([df1, df2, df3], on="id", how="inner")
+    result_inner = frame.join_frames([df1, df2, df3], on="id", how="inner")
     testing.assert_frame_equal(
-        result_inner.sort("id"), expected_inner.sort("id"), check_column_order=False
+        result_inner, expected_inner, check_row_order=False, check_column_order=False
     )
     lf1 = df1.lazy()
     lf2 = df2.lazy()
@@ -50,11 +50,9 @@ def test_join_dataframes():
         "val2": [None, 10, 20],
     }
     expected_left = pl.LazyFrame(expected_left_data)
-    result_left_lf = frame.join_dataframes([lf1, lf2], on="id", how="left")
+    result_left_lf = frame.join_frames([lf1, lf2], on="id", how="left")
     testing.assert_frame_equal(
-        result_left_lf.collect().sort("id"),
-        expected_left.collect().sort("id"),
-        check_column_order=False,
+        result_left_lf, expected_left, check_row_order=False, check_column_order=False
     )
 
 

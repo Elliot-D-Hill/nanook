@@ -19,7 +19,7 @@ def validate_splits(splits: dict[str, float]) -> dict[str, float]:
 
 def to_expr(value: str | Sequence[str] | pl.Expr) -> pl.Expr:
     match value:
-        case str() | Sequence():
+        case str() | list() | tuple():
             return pl.col(value)
         case pl.Expr():
             return value
