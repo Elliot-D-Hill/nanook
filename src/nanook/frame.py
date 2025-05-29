@@ -78,19 +78,6 @@ def collect_if_lazy(frame: Frame) -> pl.DataFrame:
             raise ValueError(f"Unsupported type: {type(frame)}.")
 
 
-# TODO: not particulary generic
-def cross_tabulation(frame: Frame, on: str) -> pl.DataFrame:
-    index = ["variable", "value"]
-    return (
-        frame.unpivot(index=on)
-        .group_by(on, *index)
-        .len()
-        .pipe(collect_if_lazy)
-        .pivot(on=on, values="len")
-        .sort(index)
-    )
-
-
 def get_column_names(frame: Frame) -> list[str]:
     match frame:
         case pl.DataFrame():
