@@ -33,6 +33,8 @@ def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
     by: str | list[str] | pl.Expr | None = None,
     stratify_by: str | list[str] | pl.Expr | None = None,
     name: str = "split",
+    shuffle: bool = True,
+    seed: int | None = None,
 ) -> T:
     """
     Assigns splits to a DataFrame/LazyFrame based on the specified proportions and groupings.
@@ -42,18 +44,24 @@ def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
         by: Column(s) to group by for assigning splits.
         stratify_by: Column(s) to stratify the splits.
         name: Name of the new column to store the assigned splits.
+        shuffle: Whether to shuffle the groups before assigning splits.
+        seed: Random seed for shuffling the groups.
     Returns:
         The input DataFrame/LazyFrame with the assigned splits as a new column.
     """
     splits = validate_splits(splits)
     split_list = list(splits.items())
     by = to_expr(by) if by is not None else pl.int_range(pl.len())
-    index = by.rank(method="dense").sub(other=1)
-    expr = pl.when(False).then(None)
+    if shuffle:
+        new_id = pl.int_range(by.n_unique()).shuffle(seed=seed)
+        group_id = by.replace_strict(by.unique(), new_id, return_dtype=pl.Int64)
+    else:
+        group_id = by.rank(method="dense").sub(other=1)
     lower = 0.0
+    expr = pl.when(False).then(None)
     for split, size in split_list[:-1]:
-        upper = lower + size * index.max()
-        assignment = index.is_between(lower, upper).over(stratify_by)
+        upper = lower + size * group_id.max()
+        assignment = group_id.is_between(lower, upper).over(stratify_by)
         expr = expr.when(assignment).then(pl.lit(split))
         lower = upper
     expr = expr.otherwise(pl.lit(split_list[-1][0]))
