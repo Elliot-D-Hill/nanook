@@ -3,6 +3,11 @@ import pytest
 
 
 @pytest.fixture
+def splits() -> dict[str, float]:
+    return {"a": 0.5, "b": 0.25, "c": 0.25}
+
+
+@pytest.fixture
 def lf() -> pl.LazyFrame:
     return pl.LazyFrame(
         {

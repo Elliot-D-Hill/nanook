@@ -53,23 +53,24 @@ def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
     split_list = list(splits.items())
     by = to_expr(by) if by is not None else pl.int_range(pl.len())
     if shuffle:
-        new_id = pl.int_range(by.n_unique()).shuffle(seed=seed)
-        group_id = by.replace_strict(by.unique(), new_id, return_dtype=pl.Int64)
-    else:
-        group_id = by.rank(method="dense").sub(other=1)
-    lower = 0.0
+        shuffled_id = pl.int_range(by.n_unique()).shuffle(seed=seed)
+        group_id = by.replace(by.unique(), shuffled_id)
+    group_id = by.rank(method="dense").sub(other=1)
+    lower = pl.lit(0)
+    n_groups = group_id.n_unique()
     expr = pl.when(False).then(None)
     for split, size in split_list[:-1]:
-        upper = lower + size * group_id.max()
-        assignment = group_id.is_between(lower, upper).over(stratify_by)
+        upper = lower + (size * n_groups)
+        assignment = group_id.is_between(lower, upper, closed="left").over(stratify_by)
         expr = expr.when(assignment).then(pl.lit(split))
         lower = upper
-    expr = expr.otherwise(pl.lit(split_list[-1][0]))
+    last_split = pl.lit(split_list[-1][0])
+    expr = expr.otherwise(last_split)
     return frame.select(expr.alias(name), cs.exclude(name))
 
 
 def join_dataframes[T: (pl.DataFrame, pl.LazyFrame)](
-    frames: list[T], on: str | list[str], how: JoinStrategy
+    frames: list[T], on: str | list[str] | pl.Expr, how: JoinStrategy
 ) -> T:
     return reduce(
         lambda left, right: left.join(right, how=how, coalesce=True, on=on), frames

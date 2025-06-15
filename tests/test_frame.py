@@ -1,13 +1,11 @@
+from typing import cast
+
+import numpy as np
 import polars as pl
 import pytest
 from polars import testing
 
 from nanook import frame
-
-
-@pytest.fixture
-def splits() -> dict[str, float]:
-    return {"a": 0.5, "b": 0.25, "c": 0.25}
 
 
 def test_validate_splits(splits: dict[str, float]):
@@ -19,16 +17,20 @@ def test_validate_splits(splits: dict[str, float]):
 
 
 def test_to_expr():
-    assert isinstance(frame.to_expr("col"), pl.Expr)
-    assert isinstance(frame.to_expr(["col1", "col2"]), pl.Expr)
-    assert isinstance(frame.to_expr(pl.col("col")), pl.Expr)
+    assert isinstance(frame.to_expr("a"), pl.Expr)
+    assert isinstance(frame.to_expr(["a", "b"]), pl.Expr)
+    assert isinstance(frame.to_expr(pl.col("a")), pl.Expr)
     with pytest.raises(ValueError):
         frame.to_expr(123)  # type: ignore[arg-type]
 
 
-def test_assign_splits(lf: pl.LazyFrame, splits: dict[str, float]):
-    result = frame.assign_splits(frame=lf, splits=splits, by="id")
-    testing.assert_frame_equal(result, lf)
+def test_assign_splits(splits: dict[str, float]):
+    splits = {"a": 0.5, "b": 0.25, "c": 0.25}
+    df = pl.DataFrame({"id": [0, 0, 1, 1, 2, 2, 3, 3]})
+    df = frame.assign_splits(frame=df, splits=splits, by="id", seed=42)
+    expected = df.group_by("split").agg(pl.len().truediv(df.height).alias("frac"))
+    for split, frac in splits.items():
+        assert expected.filter(pl.col("split") == split)["frac"].item() == frac
 
 
 def test_join_dataframes():
@@ -70,7 +72,69 @@ def test_collect_if_lazy():
 
 
 def test_get_column_names():
-    df_input = pl.DataFrame({"col1": [1], "col2": ["a"]})
-    assert frame.get_column_names(df_input) == ["col1", "col2"]
-    lf_input = pl.LazyFrame({"col_x": [1.0], "col_y": [True]})
-    assert frame.get_column_names(lf_input) == ["col_x", "col_y"]
+    df = pl.DataFrame({"x": [1], "y": ["a"]})
+    assert frame.get_column_names(df) == ["x", "y"]
+    lf = pl.LazyFrame({"x": [1.0], "y": [True]})
+    assert frame.get_column_names(lf) == ["x", "y"]
+
+
+@pytest.fixture
+def df():
+    np.random.seed(0)
+    cats = np.random.choice(["A", "B", "C"], size=100, p=[0.3, 0.5, 0.2])
+    return pl.DataFrame(
+        {
+            "id": np.arange(100),
+            "category": cats,
+            "value": np.random.randn(100),
+        }
+    )
+
+
+def assert_proportions_close(df1: pl.DataFrame, df2: pl.DataFrame, by, tol=0.05):
+    """
+    Group each frame by `by`, compute proportions, join them,
+    then assert that |prop1 - prop2| < tol for all groups.
+    """
+    g1 = (
+        df1.group_by(by)
+        .agg(pl.len().alias("n1"))
+        .with_columns((pl.col("n1") / df1.height).alias("p1"))
+    )
+    g2 = (
+        df2.group_by(by)
+        .agg(pl.len().alias("n2"))
+        .with_columns((pl.col("n2") / df2.height).alias("p2"))
+    )
+    comp = g1.join(g2, on=by, how="inner").with_columns(
+        (pl.col("p1") - pl.col("p2")).abs().alias("diff")
+    )
+    max_diff = comp["diff"].max()
+    max_diff = cast(float, max_diff)
+    assert max_diff < tol, f"Max proportion diff {comp['diff'].max()} ≥ {tol}"
+
+
+def test_stratify_by_column(df):
+    out = frame.assign_splits(
+        df, splits={"train": 0.7, "test": 0.3}, stratify_by="category", seed=42
+    )
+    train = out.filter(pl.col("split") == "train")
+    test = out.filter(pl.col("split") == "test")
+    assert_proportions_close(df, train, by="category", tol=0.05)
+    assert_proportions_close(df, test, by="category", tol=0.05)
+
+
+def test_stratify_by_list_of_columns(df):
+    df = df.with_columns(
+        (pl.col("category") + (pl.col("value") > 0).cast(pl.Utf8)).alias("combo")
+    )
+    out = frame.assign_splits(
+        df, splits={"s1": 0.5, "s2": 0.5}, stratify_by=["category", "combo"], seed=1
+    )
+    for split_name in ["s1", "s2"]:
+        part = out.filter(pl.col("split") == split_name)
+        orig_counts = df.group_by(["category", "combo"]).agg(pl.len().alias("orig_n"))
+        split_counts = part.group_by(["category", "combo"]).agg(pl.len())
+        joined = orig_counts.join(split_counts, on=["category", "combo"], how="left")
+        missing = joined.filter(pl.col("len").is_null())
+        assert missing.height == 0, f"Missing groups in split {split_name}:\n{missing}"
