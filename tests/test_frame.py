@@ -24,7 +24,6 @@ def test_to_expr():
 
 
 def test_assign_splits(splits: dict[str, float]):
-    splits = {"a": 0.5, "b": 0.25, "c": 0.25}
     df = pl.DataFrame({"id": [0, 0, 1, 1, 2, 2, 3, 3]})
     df = frame.assign_splits(frame=df, splits=splits, by="id", seed=42)
     expected = df.group_by("split").agg(pl.len().truediv(df.height).alias("frac"))
@@ -119,7 +118,7 @@ def test_stratify_by_column_repeated():
         }
     )
     splits = {"a": 0.5, "b": 0.5}
-    result = frame.assign_splits(df, splits=splits, stratify_by="label")
+    result = frame.assign_splits(df, splits=splits, stratify_by="label", shuffle=False)
     testing.assert_series_equal(
         left=result["split"], right=df["split"], check_dtypes=False
     )
