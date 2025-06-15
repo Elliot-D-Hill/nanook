@@ -1,3 +1,4 @@
+import numpy as np
 import polars as pl
 import pytest
 
@@ -5,6 +6,15 @@ import pytest
 @pytest.fixture
 def splits() -> dict[str, float]:
     return {"a": 0.5, "b": 0.25, "c": 0.25}
+
+
+@pytest.fixture
+def df():
+    np.random.seed(0)
+    cats = np.random.choice(["A", "B", "C"], size=100, p=[0.3, 0.5, 0.2])
+    return pl.DataFrame(
+        {"id": np.arange(100), "category": cats, "value": np.random.randn(100)}
+    )
 
 
 @pytest.fixture

@@ -1,6 +1,5 @@
 from typing import cast
 
-import numpy as np
 import polars as pl
 import pytest
 from polars import testing
@@ -78,60 +77,62 @@ def test_get_column_names():
     assert frame.get_column_names(lf) == ["x", "y"]
 
 
-@pytest.fixture
-def df():
-    np.random.seed(0)
-    cats = np.random.choice(["A", "B", "C"], size=100, p=[0.3, 0.5, 0.2])
-    return pl.DataFrame(
-        {
-            "id": np.arange(100),
-            "category": cats,
-            "value": np.random.randn(100),
-        }
+def assert_props_close(
+    original_df: pl.DataFrame, split_df: pl.DataFrame, by, tolerance=0.05
+):
+    original_df = (
+        original_df.group_by(by)
+        .agg(pl.len().alias("orig_count"))
+        .with_columns((pl.col("orig_count") / original_df.height).alias("orig_prop"))
+    )
+    split_dataframe = (
+        split_df.group_by(by)
+        .agg(pl.len().alias("split_count"))
+        .with_columns((pl.col("split_count") / split_df.height).alias("split_prop"))
+    )
+    comparison = original_df.join(split_dataframe, on=by, how="inner").with_columns(
+        (pl.col("orig_prop") - pl.col("split_prop")).abs().alias("prop_diff")
+    )
+    max_difference = comparison["prop_diff"].max()
+    max_difference = cast(float, max_difference)
+    assert max_difference < tolerance, (
+        f"Max proportion diff {comparison['prop_diff'].max()} ≥ {tolerance}"
     )
 
 
-def assert_proportions_close(df1: pl.DataFrame, df2: pl.DataFrame, by, tol=0.05):
-    """
-    Group each frame by `by`, compute proportions, join them,
-    then assert that |prop1 - prop2| < tol for all groups.
-    """
-    g1 = (
-        df1.group_by(by)
-        .agg(pl.len().alias("n1"))
-        .with_columns((pl.col("n1") / df1.height).alias("p1"))
-    )
-    g2 = (
-        df2.group_by(by)
-        .agg(pl.len().alias("n2"))
-        .with_columns((pl.col("n2") / df2.height).alias("p2"))
-    )
-    comp = g1.join(g2, on=by, how="inner").with_columns(
-        (pl.col("p1") - pl.col("p2")).abs().alias("diff")
-    )
-    max_diff = comp["diff"].max()
-    max_diff = cast(float, max_diff)
-    assert max_diff < tol, f"Max proportion diff {comp['diff'].max()} ≥ {tol}"
-
-
-def test_stratify_by_column(df):
+def test_stratify_by_column(df: pl.DataFrame):
     out = frame.assign_splits(
         df, splits={"train": 0.7, "test": 0.3}, stratify_by="category", seed=42
     )
     train = out.filter(pl.col("split") == "train")
     test = out.filter(pl.col("split") == "test")
-    assert_proportions_close(df, train, by="category", tol=0.05)
-    assert_proportions_close(df, test, by="category", tol=0.05)
+    assert_props_close(df, train, by="category", tolerance=0.05)
+    assert_props_close(df, test, by="category", tolerance=0.05)
 
 
-def test_stratify_by_list_of_columns(df):
+def test_stratify_by_column_repeated():
+    df = pl.DataFrame(
+        {
+            "split": ["a", "a", "b", "b", "a", "a", "a", "a", "b", "b", "b", "b"],
+            "id": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+            "label": [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+        }
+    )
+    splits = {"a": 0.5, "b": 0.5}
+    result = frame.assign_splits(df, splits=splits, stratify_by="label")
+    testing.assert_series_equal(
+        left=result["split"], right=df["split"], check_dtypes=False
+    )
+
+
+def test_stratify_by_list_of_columns(df: pl.DataFrame):
     df = df.with_columns(
         (pl.col("category") + (pl.col("value") > 0).cast(pl.Utf8)).alias("combo")
     )
     out = frame.assign_splits(
-        df, splits={"s1": 0.5, "s2": 0.5}, stratify_by=["category", "combo"], seed=1
+        df, splits={"train": 0.5, "eval": 0.5}, stratify_by=["category", "combo"]
     )
-    for split_name in ["s1", "s2"]:
+    for split_name in ["train", "eval"]:
         part = out.filter(pl.col("split") == split_name)
         orig_counts = df.group_by(["category", "combo"]).agg(pl.len().alias("orig_n"))
         split_counts = part.group_by(["category", "combo"]).agg(pl.len())
