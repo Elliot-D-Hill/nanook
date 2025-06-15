@@ -1,10 +1,9 @@
 import warnings
 from functools import reduce
-from typing import Iterable
 
 import polars as pl
 from polars import selectors as cs
-from polars._typing import JoinStrategy
+from polars._typing import IntoExpr, JoinStrategy
 
 from nanook.typing import Frame
 
@@ -17,21 +16,19 @@ def validate_splits(splits: dict[str, float]) -> dict[str, float]:
     return splits
 
 
-def to_expr(value: str | Iterable[str] | pl.Expr) -> pl.Expr:
+def to_expr(value) -> pl.Expr:
     match value:
-        case str() | list():
-            return pl.col(value)
         case pl.Expr():
             return value
         case _:
-            raise ValueError(f"Unsupported type for 'value': {type(value)}.")
+            return pl.col(value)
 
 
 def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
     frame: T,
     splits: dict[str, float],
-    by: str | list[str] | pl.Expr | None = None,
-    stratify_by: str | list[str] | pl.Expr | None = None,
+    by: IntoExpr = None,
+    stratify_by: IntoExpr = None,
     name: str = "split",
     shuffle: bool = True,
     seed: int | None = None,

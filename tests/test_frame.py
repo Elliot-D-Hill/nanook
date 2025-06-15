@@ -19,8 +19,6 @@ def test_to_expr():
     assert isinstance(frame.to_expr("a"), pl.Expr)
     assert isinstance(frame.to_expr(["a", "b"]), pl.Expr)
     assert isinstance(frame.to_expr(pl.col("a")), pl.Expr)
-    with pytest.raises(ValueError):
-        frame.to_expr(123)  # type: ignore[arg-type]
 
 
 def test_assign_splits(splits: dict[str, float]):
