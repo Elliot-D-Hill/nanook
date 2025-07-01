@@ -51,10 +51,10 @@ def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
     by = to_expr(by) if by is not None else pl.int_range(pl.len())
     group_id = pl.concat_str(by)
     n_groups = group_id.n_unique()
+    group_id = group_id.rank(method="dense").sub(other=1)
     if shuffle:
         shuffled_id = pl.int_range(n_groups).shuffle(seed=seed)
         group_id = group_id.replace(by.unique(), shuffled_id)
-    group_id = group_id.rank(method="dense").sub(other=1)
     lower = pl.lit(0)
     expr = pl.when(False).then(None)
     for split, size in split_list[:-1]:
