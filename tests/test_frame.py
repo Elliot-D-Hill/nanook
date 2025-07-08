@@ -136,3 +136,33 @@ def test_stratify_by_list_of_columns(df: pl.DataFrame):
         joined = orig_counts.join(split_counts, on=["category", "combo"], how="left")
         missing = joined.filter(pl.col("len").is_null())
         assert missing.height == 0, f"Missing groups in split {split_name}:\n{missing}"
+
+
+def test_assign_splits_disjoint_by_groups():
+    """Test that when using 'by', groups are disjoint across splits."""
+    df = pl.DataFrame(
+        {
+            "id": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+            "value": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        }
+    )
+    result = frame.assign_splits(
+        df, splits={"train": 0.6, "val": 0.2, "test": 0.2}, by="id", seed=42
+    )
+
+    train_ids = set(result.filter(pl.col("split") == "train")["id"].unique().to_list())
+    val_ids = set(result.filter(pl.col("split") == "val")["id"].unique().to_list())
+    test_ids = set(result.filter(pl.col("split") == "test")["id"].unique().to_list())
+
+    # Verify no overlap between splits
+    assert len(train_ids & val_ids) == 0, (
+        "Train and validation splits have overlapping IDs"
+    )
+    assert len(train_ids & test_ids) == 0, "Train and test splits have overlapping IDs"
+    assert len(val_ids & test_ids) == 0, (
+        "Validation and test splits have overlapping IDs"
+    )
+    # Verify all original IDs are present
+    all_split_ids = train_ids | val_ids | test_ids
+    original_ids = set(df["id"].unique().to_list())
+    assert all_split_ids == original_ids, "Some IDs were lost during splitting"
