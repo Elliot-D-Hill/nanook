@@ -48,8 +48,8 @@ def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
     """
     splits = validate_splits(splits)
     split_list = list(splits.items())
-    by = to_expr(by) if by is not None else pl.int_range(pl.len())
-    group_id = pl.concat_str(by).rank(method="dense").sub(other=1)
+    by = pl.int_range(pl.len()) if by is None else to_expr(by)
+    group_id = by.rank(method="dense").sub(other=1)
     n_groups = group_id.n_unique()
     if shuffle:
         shuffled_id = pl.int_range(n_groups).shuffle(seed=seed)
@@ -58,7 +58,9 @@ def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
     expr = pl.when(False).then(None)
     for split, size in split_list[:-1]:
         upper = lower + (size * n_groups)
-        assignment = group_id.is_between(lower, upper, closed="left").over(stratify_by)
+        assignment = group_id.is_between(lower, upper, closed="left")
+        if stratify_by is not None:
+            assignment = assignment.over(stratify_by)
         expr = expr.when(assignment).then(pl.lit(split))
         lower = upper
     last_split = pl.lit(split_list[-1][0])
