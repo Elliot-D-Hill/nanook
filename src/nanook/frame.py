@@ -49,11 +49,11 @@ def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
     splits = validate_splits(splits)
     split_list = list(splits.items())
     by = pl.int_range(pl.len()) if by is None else to_expr(by)
-    group_id = by.rank(method="dense").sub(other=1)
+    group_id = pl.struct(by).rank(method="dense").sub(other=1)
     n_groups = group_id.n_unique()
     if shuffle:
         shuffled_id = pl.int_range(n_groups).shuffle(seed=seed)
-        group_id = group_id.replace(by.unique(), shuffled_id)
+        group_id = group_id.replace(group_id.unique(), shuffled_id)
     lower = pl.lit(0)
     expr = pl.when(False).then(None)
     for split, size in split_list[:-1]:
