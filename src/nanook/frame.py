@@ -3,9 +3,7 @@ from functools import reduce
 
 import polars as pl
 from polars import selectors as cs
-from polars._typing import IntoExpr, JoinStrategy
-
-from nanook.typing import Frame
+from polars._typing import FrameType, IntoExpr, JoinStrategy
 
 
 def validate_splits(splits: dict[str, float]) -> dict[str, float]:
@@ -24,15 +22,15 @@ def to_expr(value) -> pl.Expr:
             return pl.col(value)
 
 
-def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
-    frame: T,
+def assign_splits(
+    frame: FrameType,
     splits: dict[str, float],
     by: IntoExpr = None,
     stratify_by: IntoExpr = None,
     name: str = "split",
     shuffle: bool = True,
     seed: int | None = None,
-) -> T:
+) -> FrameType:
     """
     Assigns splits to a DataFrame/LazyFrame based on the specified proportions and groupings.
     Args:
@@ -68,15 +66,15 @@ def assign_splits[T: (pl.DataFrame, pl.LazyFrame)](
     return frame.select(expr.alias(name), cs.exclude(name))
 
 
-def join_dataframes[T: (pl.DataFrame, pl.LazyFrame)](
-    frames: list[T], on: str | list[str] | pl.Expr, how: JoinStrategy
-) -> T:
+def join_dataframes(
+    frames: list[FrameType], on: str | list[str] | pl.Expr, how: JoinStrategy
+) -> FrameType:
     return reduce(
         lambda left, right: left.join(right, how=how, coalesce=True, on=on), frames
     )
 
 
-def collect_if_lazy(frame: Frame) -> pl.DataFrame:
+def collect_if_lazy(frame: FrameType) -> pl.DataFrame:
     match frame:
         case pl.DataFrame():
             return frame
@@ -86,7 +84,7 @@ def collect_if_lazy(frame: Frame) -> pl.DataFrame:
             raise ValueError(f"Unsupported type: {type(frame)}.")
 
 
-def get_column_names(frame: Frame) -> list[str]:
+def get_column_names(frame: FrameType) -> list[str]:
     match frame:
         case pl.DataFrame():
             return frame.columns
