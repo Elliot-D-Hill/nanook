@@ -51,7 +51,7 @@ def assign_splits(
     n_groups = group_id.n_unique()
     if shuffle:
         shuffled_id = pl.int_range(n_groups).shuffle(seed=seed)
-        group_id = group_id.replace(group_id.unique(), shuffled_id)
+        group_id = group_id.replace(group_id.unique(maintain_order=True), shuffled_id)
     lower = pl.lit(0)
     expr = pl.when(False).then(None)
     for split, size in split_list[:-1]:
