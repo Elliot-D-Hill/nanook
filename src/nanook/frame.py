@@ -84,6 +84,14 @@ def collect_if_lazy(frame: FrameType) -> pl.DataFrame:
             raise ValueError(f"Unsupported type: {type(frame)}.")
 
 
+def show(frame: FrameType, n: int = 5, name: str | None = None) -> FrameType:
+    if name is not None:
+        print(f"{name}")
+    df = collect_if_lazy(frame.head(n))
+    print(df)
+    return frame
+
+
 def get_column_names(frame: FrameType) -> list[str]:
     match frame:
         case pl.DataFrame():
