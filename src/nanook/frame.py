@@ -1,5 +1,6 @@
 import warnings
 from functools import reduce
+from typing import Any
 
 import polars as pl
 from polars import selectors as cs
@@ -14,7 +15,7 @@ def validate_splits(splits: dict[str, float]) -> dict[str, float]:
     return splits
 
 
-def to_expr(value) -> pl.Expr:
+def to_expr(value: Any) -> pl.Expr:
     match value:
         case pl.Expr():
             return value

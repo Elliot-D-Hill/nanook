@@ -1,6 +1,6 @@
 import polars as pl
 import polars.selectors as cs
-from polars._typing import IntoExpr
+from polars._typing import FrameType, IntoExpr
 
 from nanook.typing import Impute, Standardize
 
@@ -47,9 +47,9 @@ def impute(expr: pl.Expr, method: str, train: pl.Expr | None = None) -> pl.Expr:
     return expr.fill_null(train)
 
 
-def pipeline[T: (pl.DataFrame, pl.LazyFrame)](
-    frame: T, transforms: list[pl.Expr], over: IntoExpr | None = None
-) -> T:
+def pipeline(
+    frame: FrameType, transforms: list[pl.Expr], over: IntoExpr | None = None
+) -> FrameType:
     for transform in transforms:
         frame = frame.with_columns(transform.over(over))
     return frame

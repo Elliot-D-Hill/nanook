@@ -8,7 +8,7 @@ version = "0.0.1"
 authors = [{ name = "Elliot Hill", email = "elliot.d.hill@duke.edu" }]
 description = "Polars data science utilities"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -16,11 +16,7 @@ classifiers = [
 ]
 dependencies = ["polars>=1.38.1"]
 [dependency-groups]
-dev = [
-    "hypothesis>=6.151.9",
-    "numpy>=2.4.2",
-    "pytest>=9.0.2",
-]
+dev = ["hypothesis>=6.151.9", "numpy>=2.4.2", "pytest>=9.0.2"]
 
 [project.urls]
 Homepage = "https://github.com/Elliot-D-Hill/nanook"
