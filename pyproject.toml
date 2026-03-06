@@ -14,6 +14,13 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies = ["polars>=1.38.1"]
+[dependency-groups]
+dev = [
+    "hypothesis>=6.151.9",
+    "numpy>=2.4.2",
+    "pytest>=9.0.2",
+]
 
 [project.urls]
 Homepage = "https://github.com/Elliot-D-Hill/nanook"

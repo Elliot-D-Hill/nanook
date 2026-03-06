@@ -2,9 +2,13 @@ from typing import cast
 
 import polars as pl
 import pytest
+from hypothesis import HealthCheck, assume, given, settings
+from hypothesis import strategies as st
 from polars import testing
+from polars.testing import assert_frame_equal
 
 from nanook import frame
+from nanook.frame import lazy_sample
 
 
 def test_validate_splits(splits: dict[str, float]):
@@ -166,3 +170,337 @@ def test_assign_splits_disjoint_by_groups():
     all_split_ids = train_ids | val_ids | test_ids
     original_ids = set(df["id"].unique().to_list())
     assert all_split_ids == original_ids, "Some IDs were lost during splitting"
+
+
+# ── Hypothesis strategies ─────────────────────────────────────────────────────
+
+
+@st.composite
+def dataframes(draw, min_rows=1, max_rows=30):
+    """Generate small Polars DataFrames with integer columns."""
+    n_rows = draw(st.integers(min_value=min_rows, max_value=max_rows))
+    n_cols = draw(st.integers(min_value=1, max_value=4))
+    data = {
+        f"col_{i}": draw(
+            st.lists(st.integers(-100, 100), min_size=n_rows, max_size=n_rows)
+        )
+        for i in range(n_cols)
+    }
+    return pl.DataFrame(data)
+
+
+@st.composite
+def dataframes_with_n(draw):
+    """DataFrame paired with a valid n (without replacement)."""
+    df = draw(dataframes(min_rows=1, max_rows=20))
+    n = draw(st.integers(min_value=0, max_value=len(df)))
+    return df, n
+
+
+@st.composite
+def dataframes_with_n_replacement(draw):
+    """DataFrame paired with a valid n (with replacement, n may exceed rows)."""
+    df = draw(dataframes(min_rows=1, max_rows=20))
+    n = draw(st.integers(min_value=0, max_value=len(df) * 3))
+    return df, n
+
+
+@st.composite
+def dataframes_with_fraction(draw):
+    """DataFrame paired with a valid fraction in [0.0, 1.0]."""
+    df = draw(dataframes(min_rows=1, max_rows=20))
+    fraction = draw(st.floats(min_value=0.0, max_value=1.0, allow_nan=False))
+    return df, fraction
+
+
+# ── Unit tests (deterministic) ────────────────────────────────────────────────
+
+
+class TestReturnType:
+    def test_returns_lazyframe(self):
+        df = pl.DataFrame({"a": [1, 2, 3]})
+        result = lazy_sample(df.lazy(), n=2, seed=0)
+        assert isinstance(result, pl.LazyFrame)
+
+    def test_collect_returns_dataframe(self):
+        df = pl.DataFrame({"a": [1, 2, 3]})
+        result = lazy_sample(df.lazy(), n=2, seed=0).collect()
+        assert isinstance(result, pl.DataFrame)
+
+
+class TestSchema:
+    def test_schema_preserved_with_n(self):
+        df = pl.DataFrame({"x": [1, 2, 3], "y": [4.0, 5.0, 6.0]})
+        result = lazy_sample(df.lazy(), n=2, seed=0).collect()
+        assert result.schema == df.schema
+
+    def test_schema_preserved_with_fraction(self):
+        df = pl.DataFrame({"x": [1, 2, 3, 4], "y": ["a", "b", "c", "d"]})
+        result = lazy_sample(df.lazy(), fraction=0.5, seed=0).collect()
+        assert result.schema == df.schema
+
+    def test_no_extra_columns(self):
+        df = pl.DataFrame({"a": range(10)})
+        result = lazy_sample(df.lazy(), n=5, seed=0).collect()
+        assert result.columns == df.columns
+
+
+class TestRowCount:
+    def test_n_exact_row_count(self):
+        df = pl.DataFrame({"a": range(10)})
+        for n in [0, 1, 5, 10]:
+            result = lazy_sample(df.lazy(), n=n, seed=0).collect()
+            assert len(result) == n, f"Expected {n} rows, got {len(result)}"
+
+    def test_fraction_row_count_matches_native(self):
+        df = pl.DataFrame({"a": range(20)})
+        for frac in [0.0, 0.25, 0.5, 0.75, 1.0]:
+            lazy_result = lazy_sample(df.lazy(), fraction=frac, seed=0).collect()
+            native_result = df.sample(fraction=frac, seed=0)
+            assert len(lazy_result) == len(native_result), (
+                f"fraction={frac}: lazy={len(lazy_result)}, native={len(native_result)}"
+            )
+
+    def test_with_replacement_allows_n_greater_than_rows(self):
+        df = pl.DataFrame({"a": range(5)})
+        result = lazy_sample(df.lazy(), n=20, with_replacement=True, seed=0).collect()
+        assert len(result) == 20
+
+    def test_empty_sample_n_zero(self):
+        df = pl.DataFrame({"a": range(10)})
+        result = lazy_sample(df.lazy(), n=0, seed=0).collect()
+        assert len(result) == 0
+
+    def test_fraction_zero_returns_empty(self):
+        df = pl.DataFrame({"a": range(10)})
+        result = lazy_sample(df.lazy(), fraction=0.0, seed=0).collect()
+        assert len(result) == 0
+
+    def test_fraction_one_returns_all_rows(self):
+        df = pl.DataFrame({"a": range(10)})
+        result = lazy_sample(df.lazy(), fraction=1.0, seed=0).collect()
+        assert len(result) == len(df)
+
+
+class TestDeterminism:
+    """Same seed → same result; different seed → (very likely) different result."""
+
+    def test_same_seed_same_result_n(self):
+        df = pl.DataFrame({"a": range(20)})
+        r1 = lazy_sample(df.lazy(), n=10, seed=42).collect()
+        r2 = lazy_sample(df.lazy(), n=10, seed=42).collect()
+        assert_frame_equal(r1, r2)
+
+    def test_same_seed_same_result_fraction(self):
+        df = pl.DataFrame({"a": range(20)})
+        r1 = lazy_sample(df.lazy(), fraction=0.5, seed=42).collect()
+        r2 = lazy_sample(df.lazy(), fraction=0.5, seed=42).collect()
+        assert_frame_equal(r1, r2)
+
+    def test_matches_native_same_seed_n(self):
+        """lazy_sample and df.sample must select the same row indices with the same seed."""
+        df = pl.DataFrame({"a": range(15)})
+        lazy_result = lazy_sample(df.lazy(), n=7, seed=99).collect()
+        native_result = df.sample(n=7, seed=99)
+        assert_frame_equal(lazy_result, native_result, check_row_order=False)
+
+    def test_matches_native_same_seed_fraction(self):
+        df = pl.DataFrame({"a": range(20)})
+        lazy_result = lazy_sample(df.lazy(), fraction=0.5, seed=7).collect()
+        native_result = df.sample(fraction=0.5, seed=7)
+        assert_frame_equal(lazy_result, native_result, check_row_order=False)
+
+    def test_matches_native_with_replacement(self):
+        df = pl.DataFrame({"a": range(10)})
+        lazy_result = lazy_sample(
+            df.lazy(), n=10, with_replacement=True, seed=3
+        ).collect()
+        native_result = df.sample(n=10, with_replacement=True, seed=3)
+        assert_frame_equal(lazy_result, native_result, check_row_order=False)
+
+
+class TestWithoutReplacement:
+    def test_no_duplicate_rows_without_replacement(self):
+        df = pl.DataFrame({"a": range(20)})
+        result = lazy_sample(df.lazy(), n=15, with_replacement=False, seed=0).collect()
+        assert result["a"].n_unique() == len(result)
+
+    def test_all_sampled_rows_exist_in_original(self):
+        df = pl.DataFrame({"a": range(10), "b": list("abcdefghij")})
+        result = lazy_sample(df.lazy(), n=5, seed=0).collect()
+        original_set = set(zip(df["a"].to_list(), df["b"].to_list()))
+        result_set = set(zip(result["a"].to_list(), result["b"].to_list()))
+        assert result_set.issubset(original_set)
+
+
+class TestWithReplacement:
+    def test_can_have_duplicate_rows(self):
+        """With a tiny frame and a large n, duplicates are essentially certain."""
+        df = pl.DataFrame({"a": [1, 2]})
+        result = lazy_sample(df.lazy(), n=50, with_replacement=True, seed=0).collect()
+        assert len(result) == 50
+        # Values must still come from the original pool
+        assert set(result["a"].to_list()).issubset({1, 2})
+
+    def test_sampled_values_subset_of_original(self):
+        df = pl.DataFrame({"a": range(5)})
+        result = lazy_sample(df.lazy(), n=20, with_replacement=True, seed=1).collect()
+        assert set(result["a"].to_list()).issubset(set(df["a"].to_list()))
+
+
+class TestShuffle:
+    def test_shuffle_does_not_change_row_count(self):
+        df = pl.DataFrame({"a": range(10)})
+        r_shuffled = lazy_sample(df.lazy(), n=5, shuffle=True, seed=0).collect()
+        r_unshuffled = lazy_sample(df.lazy(), n=5, shuffle=False, seed=0).collect()
+        assert len(r_shuffled) == len(r_unshuffled)
+
+    def test_shuffle_same_multiset_as_unshuffled(self):
+        """Shuffling changes order but not the selected rows (same seed)."""
+        df = pl.DataFrame({"a": range(10)})
+        r_shuffled = lazy_sample(df.lazy(), n=5, shuffle=True, seed=42).collect()
+        r_unshuffled = lazy_sample(df.lazy(), n=5, shuffle=False, seed=42).collect()
+        assert_frame_equal(r_shuffled, r_unshuffled, check_row_order=False)
+
+    def test_shuffle_matches_native_multiset(self):
+        df = pl.DataFrame({"a": range(10)})
+        lazy_result = lazy_sample(df.lazy(), n=5, shuffle=True, seed=21).collect()
+        native_result = df.sample(n=5, shuffle=True, seed=21)
+        assert_frame_equal(lazy_result, native_result, check_row_order=False)
+
+
+class TestEdgeCases:
+    def test_single_row_dataframe_n1(self):
+        df = pl.DataFrame({"a": [42]})
+        result = lazy_sample(df.lazy(), n=1, seed=0).collect()
+        assert len(result) == 1
+        assert result["a"][0] == 42
+
+    def test_single_row_dataframe_fraction_one(self):
+        df = pl.DataFrame({"a": [42]})
+        result = lazy_sample(df.lazy(), fraction=1.0, seed=0).collect()
+        assert len(result) == 1
+
+    def test_sample_all_rows_no_replacement(self):
+        df = pl.DataFrame({"a": range(10)})
+        result = lazy_sample(df.lazy(), n=10, with_replacement=False, seed=0).collect()
+        assert_frame_equal(result, df, check_row_order=False)
+
+    def test_multiple_columns_preserved(self):
+        df = pl.DataFrame(
+            {
+                "int_col": [1, 2, 3, 4, 5],
+                "float_col": [1.1, 2.2, 3.3, 4.4, 5.5],
+                "str_col": ["a", "b", "c", "d", "e"],
+            }
+        )
+        result = lazy_sample(df.lazy(), n=3, seed=0).collect()
+        assert result.columns == df.columns
+        assert result.dtypes == df.dtypes
+
+    def test_n_equals_zero_returns_empty_with_correct_schema(self):
+        df = pl.DataFrame({"x": pl.Series([1, 2, 3], dtype=pl.Int32)})
+        result = lazy_sample(df.lazy(), n=0, seed=0).collect()
+        assert result.schema == df.schema
+        assert len(result) == 0
+
+
+class TestErrors:
+    def test_raises_if_n_exceeds_rows_without_replacement(self):
+        df = pl.DataFrame({"a": range(3)})
+        with pytest.raises(Exception):
+            lazy_sample(df.lazy(), n=10, with_replacement=False, seed=0).collect()
+
+
+# ── Hypothesis property-based tests ──────────────────────────────────────────
+
+
+@given(df_n=dataframes_with_n())
+@settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
+def test_property_row_count_matches_n(df_n):
+    df, n = df_n
+    result = lazy_sample(df.lazy(), n=n, seed=0).collect()
+    assert len(result) == n
+
+
+@given(df_n=dataframes_with_n())
+@settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
+def test_property_no_duplicates_without_replacement(df_n):
+    df, n = df_n
+    assume(n > 0)
+    # Each sampled row index should be unique; verify via a unique key column
+    # We add an index to the original to track identity
+    indexed = df.with_row_index("__row_id")
+    lazy_indexed = indexed.lazy()
+    res = lazy_sample(lazy_indexed, n=n, seed=1).collect()
+    assert res["__row_id"].n_unique() == n
+
+
+@given(df_n=dataframes_with_n_replacement())
+@settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
+def test_property_row_count_with_replacement(df_n):
+    df, n = df_n
+    result = lazy_sample(df.lazy(), n=n, with_replacement=True, seed=2).collect()
+    assert len(result) == n
+
+
+@given(df_frac=dataframes_with_fraction())
+@settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
+def test_property_fraction_row_count_matches_native(df_frac):
+    df, fraction = df_frac
+    lazy_result = lazy_sample(df.lazy(), fraction=fraction, seed=5).collect()
+    native_result = df.sample(fraction=fraction, seed=5)
+    assert len(lazy_result) == len(native_result)
+
+
+@given(df_n=dataframes_with_n())
+@settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
+def test_property_schema_invariant(df_n):
+    df, n = df_n
+    result = lazy_sample(df.lazy(), n=n, seed=0).collect()
+    assert result.schema == df.schema
+    assert result.columns == df.columns
+
+
+@given(df_n=dataframes_with_n())
+@settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
+def test_property_sampled_rows_are_subset_of_original(df_n):
+    """Every sampled row must actually exist in the original frame."""
+    df, n = df_n
+    assume(n > 0)
+    # Tag each original row with a unique id so we can track it
+    indexed = df.with_row_index("__row_id")
+    result = lazy_sample(indexed.lazy(), n=n, seed=42).collect()
+    original_ids = set(indexed["__row_id"].to_list())
+    result_ids = set(result["__row_id"].to_list())
+    assert result_ids.issubset(original_ids)
+
+
+@given(df_n=dataframes_with_n())
+@settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
+def test_property_determinism(df_n):
+    """Two calls with the same seed return identical frames."""
+    df, n = df_n
+    r1 = frame.lazy_sample(df.lazy(), n=n, seed=77).collect()
+    r2 = lazy_sample(df.lazy(), n=n, seed=77).collect()
+    testing.assert_frame_equal(r1, r2)
+
+
+@given(df_n=dataframes_with_n())
+@settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
+def test_property_multiset_matches_native_n(df_n):
+    """lazy_sample and df.sample select the same multiset of rows (same seed)."""
+    df, n = df_n
+    lazy_result = lazy_sample(df.lazy(), n=n, seed=13).collect()
+    native_result = df.sample(n=n, seed=13)
+    assert_frame_equal(lazy_result, native_result, check_row_order=False)
+
+
+@given(df_frac=dataframes_with_fraction())
+@settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
+def test_property_multiset_matches_native_fraction(df_frac):
+    """lazy_sample and df.sample select the same multiset for fraction sampling."""
+    df, fraction = df_frac
+    lazy_result = lazy_sample(df.lazy(), fraction=fraction, seed=13).collect()
+    native_result = df.sample(fraction=fraction, seed=13)
+    assert_frame_equal(lazy_result, native_result, check_row_order=False)

@@ -100,3 +100,27 @@ def get_column_names(frame: FrameType) -> list[str]:
             return frame.collect_schema().names()
         case _:
             raise ValueError(f"Unsupported type: {type(frame)}.")
+
+
+def lazy_sample(
+    lf: pl.LazyFrame,
+    n: int | None = None,
+    fraction: float | None = None,
+    with_replacement: bool = False,
+    shuffle: bool = False,
+    seed: int = 0,
+) -> pl.LazyFrame:
+    sample_kwargs = {
+        "with_replacement": with_replacement,
+        "shuffle": shuffle,
+        "seed": seed,
+    }
+    if fraction is not None:
+        sample_kwargs["fraction"] = fraction
+    else:
+        sample_kwargs["n"] = n if n is not None else 1
+    index = "__idx"
+    lf = lf.with_columns(pl.int_range(pl.len()).alias(index))
+    sample_idx = lf.select(pl.col(index).sample(**sample_kwargs))
+    sampled = lf.join(sample_idx, on=index).drop(index)
+    return sampled
